@@ -1,0 +1,246 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Napięcia Szprych</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background-color: #f4f4f4; }
+        h1 { text-align: center; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .inline-inputs { display: flex; gap: 10px; }
+        .inline-inputs input { flex: 1; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .side-tables { display: flex; justify-content: space-between; }
+        .side-tables div { width: 48%; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        table td input { width: 80%; }
+        .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
+        #chart-container { margin-top: 20px; }
+        .error { color: red; font-size: 14px; }
+        canvas { max-width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kalkulator Napięcia Szprych</h1>
+        <div class="inline-inputs">
+            <div>
+                <label for="constantA">Stała a:</label>
+                <input type="number" id="constantA" step="any" placeholder="Wprowadź stałą a" required>
+            </div>
+            <div>
+                <label for="constantB">Stała b:</label>
+                <input type="number" id="constantB" step="any" placeholder="Wprowadź stałą b" required>
+            </div>
+        </div>
+        <div class="side-spokes">
+            <div>
+                <label for="leftSpokes">Liczba szprych lewa strona:</label>
+                <select id="leftSpokes" onchange="updateTables()">
+                    <option value="12">12</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                </select>
+            </div>
+            <div>
+                <label for="rightSpokes">Liczba szprych prawa strona:</label>
+                <select id="rightSpokes" onchange="updateTables()">
+                    <option value="12">12</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                </select>
+            </div>
+        </div>
+        <div class="side-tables" id="tables"></div>
+        <div id="chart-container">
+            <canvas id="tensionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let leftInputs = [];
+        let rightInputs = [];
+        let myChart = null;
+
+        function updateTables() {
+            const leftCount = parseInt(document.getElementById('leftSpokes').value);
+            const rightCount = parseInt(document.getElementById('rightSpokes').value);
+            const tablesDiv = document.getElementById('tables');
+            let html = '';
+
+            // Lewa tabela
+            html += '<div><h3>Lewa strona</h3>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th></tr>';
+            leftInputs = [];
+            for (let i = 0; i < leftCount; i++) {
+                const input = `<input type="number" step="any" oninput="calculateTensions()" placeholder="Wprowadź y">`;
+                html += `<tr><td>L${i + 1}</td><td>${input}</td><td id="l${i}"></td></tr>`;
+                leftInputs.push(document.createElement('input'));
+            }
+            html += '</table>';
+            html += '<div class="stats" id="leftStats"></div></div>';
+
+            // Prawa tabela
+            html += '<div><h3>Prawa strona</h3>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th></tr>';
+            rightInputs = [];
+            for (let i = 0; i < rightCount; i++) {
+                const input = `<input type="number" step="any" oninput="calculateTensions()" placeholder="Wprowadź y">`;
+                html += `<tr><td>P${i + 1}</td><td>${input}</td><td id="r${i}"></td></tr>`;
+                rightInputs.push(document.createElement('input'));
+            }
+            html += '</table>';
+            html += '<div class="stats" id="rightStats"></div></div>';
+
+            tablesDiv.innerHTML = html;
+            calculateTensions();
+        }
+
+        function calculateTensions() {
+            const a = parseFloat(document.getElementById('constantA').value);
+            const b = parseFloat(document.getElementById('constantB').value);
+            const tablesDiv = document.getElementById('tables');
+            const ctx = document.getElementById('tensionChart').getContext('2d');
+
+            if (isNaN(a) || isNaN(b)) {
+                tablesDiv.innerHTML = '<span class="error">Proszę wprowadzić stałe a i b.</span>';
+                return;
+            }
+
+            const leftTable = tablesDiv.getElementsByTagName('table')[0];
+            const rightTable = tablesDiv.getElementsByTagName('table')[1];
+            const leftInputs = leftTable.getElementsByTagName('input');
+            const rightInputs = rightTable.getElementsByTagName('input');
+            const leftTensions = [];
+            const rightTensions = [];
+
+            // Lewa strona
+            for (let i = 0; i < leftInputs.length; i++) {
+                const y = parseFloat(leftInputs[i].value);
+                const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
+                leftTensions.push(x);
+                const cell = leftTable.rows[i + 1].cells[2];
+                cell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : x.toFixed(2);
+            }
+
+            // Prawa strona
+            for (let i = 0; i < rightInputs.length; i++) {
+                const y = parseFloat(rightInputs[i].value);
+                const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
+                rightTensions.push(x);
+                const cell = rightTable.rows[i + 1].cells[2];
+                cell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : x.toFixed(2);
+            }
+
+            // Statystyki w niutonach
+            const mean = arr => arr.reduce((a, b) => a + b, 0) / arr.length || 0;
+            const stdDev = arr => {
+                const n = arr.length;
+                const m = mean(arr);
+                return Math.sqrt(arr.map(x => (x - m) * (x - m)).reduce((a, b) => a + b) / n) || 0;
+            };
+            const validLeft = leftTensions.filter(x => !isNaN(x) && x > 0);
+            const validRight = rightTensions.filter(x => !isNaN(x) && x > 0);
+            const leftMean = mean(validLeft);
+            const rightMean = mean(validRight);
+            const leftStd = stdDev(validLeft);
+            const rightStd = stdDev(validRight);
+            const leftUpper = leftMean * 1.2;
+            const rightUpper = rightMean * 1.2;
+            const leftLower = leftMean * 0.8;
+            const rightLower = rightMean * 0.8;
+
+            document.getElementById('leftStats').innerHTML = `
+                Average Spoke Tension (N): ${leftMean.toFixed(2)}<br>
+                Standard Deviation of Tension (N): ${leftStd.toFixed(2)}<br>
+                +20% Upper Tension Limit (N): ${leftUpper.toFixed(2)}<br>
+                -20% Lower Tension Limit (N): ${leftLower.toFixed(2)}<br>
+                TM-1 Reading at +20% Limit: ${((Math.log(leftUpper) * a - b) || 0).toFixed(2)}<br>
+                TM-1 Reading at -20% Limit: ${((Math.log(leftLower) * a - b) || 0).toFixed(2)}
+            `;
+            document.getElementById('rightStats').innerHTML = `
+                Average Spoke Tension (N): ${rightMean.toFixed(2)}<br>
+                Standard Deviation of Tension (N): ${rightStd.toFixed(2)}<br>
+                +20% Upper Tension Limit (N): ${rightUpper.toFixed(2)}<br>
+                -20% Lower Tension Limit (N): ${rightLower.toFixed(2)}<br>
+                TM-1 Reading at +20% Limit: ${((Math.log(rightUpper) * a - b) || 0).toFixed(2)}<br>
+                TM-1 Reading at -20% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
+            `;
+
+            // Aktualizacja wykresu
+            if (myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: [...Array(leftInputs.length).keys()].map(i => `L${i + 1}`),
+                    datasets: [{
+                        label: 'Lewa strona',
+                        data: leftTensions,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 2
+                    }, {
+                        label: 'Prawa strona',
+                        data: rightTensions,
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    scales: { r: { beginAtZero: true, min: 0 } },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+
+        // Inicjalizacja przy załadowaniu strony
+        window.onload = updateTables;
+    </script>
+</body>
+</html>
