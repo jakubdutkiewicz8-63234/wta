@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
@@ -150,7 +189,7 @@
 
             // Lewa tabela
             html += '<div><h3>Lewa strona</h3>';
-            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th><th>Różnica (%)</th></tr>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt</th><th>Naprężenie (N)</th><th>Różnica (%)</th></tr>';
             leftInputs = [];
             for (let i = 0; i < leftCount; i++) {
                 const value = leftValues[i] || '';
@@ -163,7 +202,7 @@
 
             // Prawa tabela
             html += '<div><h3>Prawa strona</h3>';
-            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th><th>Różnica (%)</th></tr>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt</th><th>Naprężenie (N)</th><th>Różnica (%)</th></tr>';
             rightInputs = [];
             for (let i = 0; i < rightCount; i++) {
                 const value = rightValues[i] || '';
@@ -278,25 +317,29 @@
                 Reading at -${maxDiff}% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
             `;
 
-            // Etykiety wykresu z sekwencyjnym numerowaniem, uwzględniającym przesunięcie
-            const totalCount = leftCount + rightCount;
-            const labels = Array.from({ length: totalCount }, (_, i) => `${i + 1}`);
+            // Etykiety i dane na wykresie
+            const totalCount = Math.max(leftCount, rightCount) * 2; // Używamy podwójnej liczby dla par
+            const labels = [];
+            for (let i = 0; i < totalCount / 2; i++) {
+                labels.push(i + 1);
+                labels.push(i + 1);
+            }
             const leftData = new Array(totalCount).fill(NaN);
             const rightData = new Array(totalCount).fill(NaN);
 
             if (spokeOrder === 'leftLeads') {
                 for (let i = 0; i < leftCount; i++) {
-                    leftData[i * 2] = leftTensions[i] || NaN;
+                    leftData[i * 2] = leftTensions[i] || NaN; // Parzyste pozycje dla lewej
                 }
                 for (let i = 0; i < rightCount; i++) {
-                    rightData[i * 2 + 1] = rightTensions[i] || NaN;
+                    rightData[i * 2 + 1] = rightTensions[i] || NaN; // Nieparzyste pozycje dla prawej
                 }
             } else { // rightLeads
                 for (let i = 0; i < rightCount; i++) {
-                    rightData[i * 2] = rightTensions[i] || NaN;
+                    rightData[i * 2] = rightTensions[i] || NaN; // Parzyste pozycje dla prawej
                 }
                 for (let i = 0; i < leftCount; i++) {
-                    leftData[i * 2 + 1] = leftTensions[i] || NaN;
+                    leftData[i * 2 + 1] = leftTensions[i] || NaN; // Nieparzyste pozycje dla lewej
                 }
             }
 
