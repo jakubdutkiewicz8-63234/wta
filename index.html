@@ -37,7 +37,9 @@
         }
         return gk_fileData[filename] || "";
         }
-        </script><!DOCTYPE html>
+        </script>
+
+<!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
@@ -48,8 +50,9 @@
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background-color: #f4f4f4; }
         h1 { text-align: center; color: #333; }
         .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .inline-inputs { display: flex; gap: 10px; }
-        .inline-inputs input { flex: 1; }
+        .inline-inputs { display: flex; justify-content: space-between; }
+        .left-inputs { display: flex; gap: 10px; flex: 1; }
+        .right-input { flex: 1; }
         label { display: block; margin: 10px 0 5px; font-weight: bold; }
         input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
         .side-tables { display: flex; justify-content: space-between; }
@@ -60,26 +63,50 @@
         .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
         #chart-container { margin-top: 20px; }
         .error { color: red; font-size: 14px; }
+        .red-text { color: red; }
         canvas { max-width: 100%; }
+        .custom-inputs { display: none; }
+        .custom-inputs.active { display: flex; }
+        .switcher { margin-top: 10px; text-align: center; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Kalkulator Napięcia Szprych</h1>
         <div class="inline-inputs">
-            <div>
-                <label for="constantA">Stała a:</label>
-                <input type="number" id="constantA" step="any" placeholder="Wprowadź stałą a" required>
+            <div class="left-inputs">
+                <div>
+                    <label for="constantSet">Zestaw stałych:</label>
+                    <select id="constantSet" onchange="updateConstants()">
+                        <option value="custom">Custom</option>
+                        <option value="1.8mm">1,8 mm (a=94,59, b=408,685)</option>
+                        <option value="2.0mm">2,0 mm (a=94,52, b=365,08)</option>
+                    </select>
+                </div>
+                <div class="custom-inputs" id="customInputs">
+                    <div>
+                        <label for="constantA">Stała a:</label>
+                        <input type="number" id="constantA" step="any" placeholder="Wprowadź stałą a" oninput="calculateTensions()">
+                    </div>
+                    <div>
+                        <label for="constantB">Stała b:</label>
+                        <input type="number" id="constantB" step="any" placeholder="Wprowadź stałą b" oninput="calculateTensions()">
+                    </div>
+                </div>
             </div>
-            <div>
-                <label for="constantB">Stała b:</label>
-                <input type="number" id="constantB" step="any" placeholder="Wprowadź stałą b" required>
+            <div class="right-input">
+                <label for="maxDifference">Maks. różnica (%):</label>
+                <input type="number" id="maxDifference" step="any" placeholder="Wprowadź maks. różnicę" value="10" required oninput="calculateTensions()">
             </div>
         </div>
         <div class="side-spokes">
             <div>
                 <label for="leftSpokes">Liczba szprych lewa strona:</label>
                 <select id="leftSpokes" onchange="updateTables()">
+                    <option value="4">4</option>
+                    <option value="6">6</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
                     <option value="12">12</option>
                     <option value="14">14</option>
                     <option value="16">16</option>
@@ -89,6 +116,10 @@
             <div>
                 <label for="rightSpokes">Liczba szprych prawa strona:</label>
                 <select id="rightSpokes" onchange="updateTables()">
+                    <option value="4">4</option>
+                    <option value="6">6</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
                     <option value="12">12</option>
                     <option value="14">14</option>
                     <option value="16">16</option>
@@ -99,6 +130,10 @@
         <div class="side-tables" id="tables"></div>
         <div id="chart-container">
             <canvas id="tensionChart"></canvas>
+            <div class="switcher">
+                <label><input type="radio" name="spokeOrder" value="leftLeads" checked onchange="calculateTensions()"> Lewa wyprzedza prawą</label>
+                <label><input type="radio" name="spokeOrder" value="rightLeads" onchange="calculateTensions()"> Prawa wyprzedza lewą</label>
+            </div>
         </div>
     </div>
 
@@ -106,20 +141,80 @@
         let leftInputs = [];
         let rightInputs = [];
         let myChart = null;
+        let leftValues = [];
+        let rightValues = [];
+
+        function updateConstants() {
+            const constantSet = document.getElementById('constantSet').value;
+            const customInputs = document.getElementById('customInputs');
+            const aInput = document.getElementById('constantA');
+            const bInput = document.getElementById('constantB');
+
+            if (constantSet === 'custom') {
+                customInputs.classList.add('active');
+                aInput.value = '';
+                bInput.value = '';
+                aInput.disabled = false;
+                bInput.disabled = false;
+            } else {
+                customInputs.classList.remove('active');
+                if (constantSet === '1.8mm') {
+                    aInput.value = 94.59;
+                    bInput.value = 408.685;
+                } else if (constantSet === '2.0mm') {
+                    aInput.value = 94.52;
+                    bInput.value = 365.08;
+                }
+                aInput.disabled = true;
+                bInput.disabled = true;
+            }
+            calculateTensions();
+        }
 
         function updateTables() {
             const leftCount = parseInt(document.getElementById('leftSpokes').value);
             const rightCount = parseInt(document.getElementById('rightSpokes').value);
             const tablesDiv = document.getElementById('tables');
+            const spokeOrder = document.querySelector('input[name="spokeOrder"]:checked').value;
             let html = '';
+
+            // Zachowaj istniejące wartości
+            const leftTable = tablesDiv.getElementsByTagName('table')[0];
+            if (leftTable) {
+                const inputs = leftTable.getElementsByTagName('input');
+                leftValues = Array.from(inputs).map(input => input.value);
+            }
+            const rightTable = tablesDiv.getElementsByTagName('table')[1];
+            if (rightTable) {
+                const inputs = rightTable.getElementsByTagName('input');
+                rightValues = Array.from(inputs).map(input => input.value);
+            }
+
+            // Mapowanie numerów szprych zgodnie z przesunięciem
+            const maxCount = Math.max(leftCount, rightCount);
+            const leftIndices = new Array(leftCount).fill(null);
+            const rightIndices = new Array(rightCount).fill(null);
+            let labelIndex = 1;
+
+            for (let i = 0; i < maxCount; i++) {
+                if (spokeOrder === 'leftLeads') {
+                    if (i < leftCount) leftIndices[i] = labelIndex++;
+                    if (i < rightCount) rightIndices[i] = labelIndex++;
+                } else {
+                    if (i < rightCount) rightIndices[i] = labelIndex++;
+                    if (i < leftCount) leftIndices[i] = labelIndex++;
+                }
+            }
 
             // Lewa tabela
             html += '<div><h3>Lewa strona</h3>';
-            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th></tr>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th><th>Różnica (%)</th></tr>';
             leftInputs = [];
             for (let i = 0; i < leftCount; i++) {
-                const input = `<input type="number" step="any" oninput="calculateTensions()" placeholder="Wprowadź y">`;
-                html += `<tr><td>L${i + 1}</td><td>${input}</td><td id="l${i}"></td></tr>`;
+                const value = leftValues[i] || '';
+                const input = `<input type="number" step="any" value="${value}" oninput="calculateTensions()" placeholder="Wprowadź y">`;
+                const spokeNumber = leftIndices[i] !== null ? leftIndices[i] : '-';
+                html += `<tr><td>${spokeNumber}</td><td>${input}</td><td id="l${i}"></td><td id="ld${i}"></td></tr>`;
                 leftInputs.push(document.createElement('input'));
             }
             html += '</table>';
@@ -127,11 +222,13 @@
 
             // Prawa tabela
             html += '<div><h3>Prawa strona</h3>';
-            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th></tr>';
+            html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th><th>Różnica (%)</th></tr>';
             rightInputs = [];
             for (let i = 0; i < rightCount; i++) {
-                const input = `<input type="number" step="any" oninput="calculateTensions()" placeholder="Wprowadź y">`;
-                html += `<tr><td>P${i + 1}</td><td>${input}</td><td id="r${i}"></td></tr>`;
+                const value = rightValues[i] || '';
+                const input = `<input type="number" step="any" value="${value}" oninput="calculateTensions()" placeholder="Wprowadź y">`;
+                const spokeNumber = rightIndices[i] !== null ? rightIndices[i] : '-';
+                html += `<tr><td>${spokeNumber}</td><td>${input}</td><td id="r${i}"></td><td id="rd${i}"></td></tr>`;
                 rightInputs.push(document.createElement('input'));
             }
             html += '</table>';
@@ -142,10 +239,14 @@
         }
 
         function calculateTensions() {
-            const a = parseFloat(document.getElementById('constantA').value);
-            const b = parseFloat(document.getElementById('constantB').value);
+            const a = parseFloat(document.getElementById('constantA').value) || 0;
+            const b = parseFloat(document.getElementById('constantB').value) || 0;
+            const maxDiff = parseFloat(document.getElementById('maxDifference').value) || 0;
             const tablesDiv = document.getElementById('tables');
             const ctx = document.getElementById('tensionChart').getContext('2d');
+            const spokeOrder = document.querySelector('input[name="spokeOrder"]:checked').value;
+            const leftCount = parseInt(document.getElementById('leftSpokes').value);
+            const rightCount = parseInt(document.getElementById('rightSpokes').value);
 
             if (isNaN(a) || isNaN(b)) {
                 tablesDiv.innerHTML = '<span class="error">Proszę wprowadzić stałe a i b.</span>';
@@ -164,8 +265,8 @@
                 const y = parseFloat(leftInputs[i].value);
                 const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
                 leftTensions.push(x);
-                const cell = leftTable.rows[i + 1].cells[2];
-                cell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : x.toFixed(2);
+                const tensionCell = leftTable.rows[i + 1].cells[2];
+                tensionCell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : Math.round(x);
             }
 
             // Prawa strona
@@ -173,11 +274,11 @@
                 const y = parseFloat(rightInputs[i].value);
                 const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
                 rightTensions.push(x);
-                const cell = rightTable.rows[i + 1].cells[2];
-                cell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : x.toFixed(2);
+                const tensionCell = rightTable.rows[i + 1].cells[2];
+                tensionCell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : Math.round(x);
             }
 
-            // Statystyki w niutonach
+            // Statystyki i różnice
             const mean = arr => arr.reduce((a, b) => a + b, 0) / arr.length || 0;
             const stdDev = arr => {
                 const n = arr.length;
@@ -190,46 +291,120 @@
             const rightMean = mean(validRight);
             const leftStd = stdDev(validLeft);
             const rightStd = stdDev(validRight);
-            const leftUpper = leftMean * 1.2;
-            const rightUpper = rightMean * 1.2;
-            const leftLower = leftMean * 0.8;
-            const rightLower = rightMean * 0.8;
+            const maxDiffFactor = maxDiff / 100;
+            const leftUpper = leftMean * (1 + maxDiffFactor);
+            const rightUpper = rightMean * (1 + maxDiffFactor);
+            const leftLower = leftMean * (1 - maxDiffFactor);
+            const rightLower = rightMean * (1 - maxDiffFactor);
+
+            // Różnice w procentach
+            for (let i = 0; i < leftTensions.length; i++) {
+                const x = leftTensions[i];
+                const diffCell = leftTable.rows[i + 1].cells[3];
+                if (!isNaN(x) && x > 0 && leftMean > 0) {
+                    const diff = Math.abs((x - leftMean) / leftMean * 100).toFixed(2);
+                    diffCell.textContent = `${diff}%`;
+                    diffCell.className = (diff > maxDiff) ? 'red-text' : '';
+                } else {
+                    diffCell.textContent = 'Błąd';
+                }
+            }
+            for (let i = 0; i < rightTensions.length; i++) {
+                const x = rightTensions[i];
+                const diffCell = rightTable.rows[i + 1].cells[3];
+                if (!isNaN(x) && x > 0 && rightMean > 0) {
+                    const diff = Math.abs((x - rightMean) / rightMean * 100).toFixed(2);
+                    diffCell.textContent = `${diff}%`;
+                    diffCell.className = (diff > maxDiff) ? 'red-text' : '';
+                } else {
+                    diffCell.textContent = 'Błąd';
+                }
+            }
 
             document.getElementById('leftStats').innerHTML = `
-                Average Spoke Tension (N): ${leftMean.toFixed(2)}<br>
+                Average Spoke Tension (N): ${Math.round(leftMean)}<br>
                 Standard Deviation of Tension (N): ${leftStd.toFixed(2)}<br>
-                +20% Upper Tension Limit (N): ${leftUpper.toFixed(2)}<br>
-                -20% Lower Tension Limit (N): ${leftLower.toFixed(2)}<br>
-                TM-1 Reading at +20% Limit: ${((Math.log(leftUpper) * a - b) || 0).toFixed(2)}<br>
-                TM-1 Reading at -20% Limit: ${((Math.log(leftLower) * a - b) || 0).toFixed(2)}
+                +${maxDiff}% Upper Tension Limit (N): ${Math.round(leftUpper)}<br>
+                -${maxDiff}% Lower Tension Limit (N): ${Math.round(leftLower)}<br>
+                Reading at +${maxDiff}% Limit: ${((Math.log(leftUpper) * a - b) || 0).toFixed(2)}<br>
+                Reading at -${maxDiff}% Limit: ${((Math.log(leftLower) * a - b) || 0).toFixed(2)}
             `;
             document.getElementById('rightStats').innerHTML = `
-                Average Spoke Tension (N): ${rightMean.toFixed(2)}<br>
+                Average Spoke Tension (N): ${Math.round(rightMean)}<br>
                 Standard Deviation of Tension (N): ${rightStd.toFixed(2)}<br>
-                +20% Upper Tension Limit (N): ${rightUpper.toFixed(2)}<br>
-                -20% Lower Tension Limit (N): ${rightLower.toFixed(2)}<br>
-                TM-1 Reading at +20% Limit: ${((Math.log(rightUpper) * a - b) || 0).toFixed(2)}<br>
-                TM-1 Reading at -20% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
+                +${maxDiff}% Upper Tension Limit (N): ${Math.round(rightUpper)}<br>
+                -${maxDiff}% Lower Tension Limit (N): ${Math.round(rightLower)}<br>
+                Reading at +${maxDiff}% Limit: ${((Math.log(rightUpper) * a - b) || 0).toFixed(2)}<br>
+                Reading at -${maxDiff}% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
             `;
+
+            // Etykiety wykresu z przesunięciem
+            const maxCount = Math.max(leftCount, rightCount);
+            const labels = [];
+            const leftIndices = new Array(leftCount).fill(null);
+            const rightIndices = new Array(rightCount).fill(null);
+            let labelIndex = 1;
+
+            for (let i = 0; i < maxCount; i++) {
+                if (spokeOrder === 'leftLeads') {
+                    if (i < leftCount) {
+                        labels.push(`${labelIndex}`);
+                        leftIndices[i] = labels.length - 1;
+                        labelIndex++;
+                    }
+                    if (i < rightCount) {
+                        labels.push(`${labelIndex}`);
+                        rightIndices[i] = labels.length - 1;
+                        labelIndex++;
+                    }
+                } else {
+                    if (i < rightCount) {
+                        labels.push(`${labelIndex}`);
+                        rightIndices[i] = labels.length - 1;
+                        labelIndex++;
+                    }
+                    if (i < leftCount) {
+                        labels.push(`${labelIndex}`);
+                        leftIndices[i] = labels.length - 1;
+                        labelIndex++;
+                    }
+                }
+            }
+
+            // Przygotowanie danych do wykresu
+            const leftData = new Array(labels.length).fill(NaN);
+            const rightData = new Array(labels.length).fill(NaN);
+            for (let i = 0; i < leftCount; i++) {
+                if (leftIndices[i] !== null) {
+                    leftData[leftIndices[i]] = leftTensions[i];
+                }
+            }
+            for (let i = 0; i < rightCount; i++) {
+                if (rightIndices[i] !== null) {
+                    rightData[rightIndices[i]] = rightTensions[i];
+                }
+            }
 
             // Aktualizacja wykresu
             if (myChart) myChart.destroy();
             myChart = new Chart(ctx, {
                 type: 'radar',
                 data: {
-                    labels: [...Array(leftInputs.length).keys()].map(i => `L${i + 1}`),
+                    labels: labels,
                     datasets: [{
                         label: 'Lewa strona',
-                        data: leftTensions,
+                        data: leftData,
                         backgroundColor: 'rgba(54, 162, 235, 0.2)',
                         borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 2
+                        borderWidth: 2,
+                        spanGaps: true
                     }, {
                         label: 'Prawa strona',
-                        data: rightTensions,
+                        data: rightData,
                         backgroundColor: 'rgba(255, 99, 132, 0.2)',
                         borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 2
+                        borderWidth: 2,
+                        spanGaps: true
                     }]
                 },
                 options: {
@@ -240,7 +415,14 @@
         }
 
         // Inicjalizacja przy załadowaniu strony
-        window.onload = updateTables;
+        window.onload = function() {
+            updateConstants();
+            updateTables();
+        };
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9677f99e29d3a4a6',t:'MTc1MzkxMTIxMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
+
     </script>
 </body>
 </html>
