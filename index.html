@@ -1,44 +1,3 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script>
-
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -175,7 +134,6 @@
             const leftCount = parseInt(document.getElementById('leftSpokes').value);
             const rightCount = parseInt(document.getElementById('rightSpokes').value);
             const tablesDiv = document.getElementById('tables');
-            const spokeOrder = document.querySelector('input[name="spokeOrder"]:checked').value;
             let html = '';
 
             // Zachowaj istniejące wartości
@@ -190,22 +148,6 @@
                 rightValues = Array.from(inputs).map(input => input.value);
             }
 
-            // Mapowanie numerów szprych zgodnie z przesunięciem
-            const maxCount = Math.max(leftCount, rightCount);
-            const leftIndices = new Array(leftCount).fill(null);
-            const rightIndices = new Array(rightCount).fill(null);
-            let labelIndex = 1;
-
-            for (let i = 0; i < maxCount; i++) {
-                if (spokeOrder === 'leftLeads') {
-                    if (i < leftCount) leftIndices[i] = labelIndex++;
-                    if (i < rightCount) rightIndices[i] = labelIndex++;
-                } else {
-                    if (i < rightCount) rightIndices[i] = labelIndex++;
-                    if (i < leftCount) leftIndices[i] = labelIndex++;
-                }
-            }
-
             // Lewa tabela
             html += '<div><h3>Lewa strona</h3>';
             html += '<table><tr><th>Szprycha</th><th>Odczyt y</th><th>Napięcie x (N)</th><th>Różnica (%)</th></tr>';
@@ -213,8 +155,7 @@
             for (let i = 0; i < leftCount; i++) {
                 const value = leftValues[i] || '';
                 const input = `<input type="number" step="any" value="${value}" oninput="calculateTensions()" placeholder="Wprowadź y">`;
-                const spokeNumber = leftIndices[i] !== null ? leftIndices[i] : '-';
-                html += `<tr><td>${spokeNumber}</td><td>${input}</td><td id="l${i}"></td><td id="ld${i}"></td></tr>`;
+                html += `<tr><td>${i + 1}</td><td>${input}</td><td id="l${i}"></td><td id="ld${i}"></td></tr>`;
                 leftInputs.push(document.createElement('input'));
             }
             html += '</table>';
@@ -227,8 +168,7 @@
             for (let i = 0; i < rightCount; i++) {
                 const value = rightValues[i] || '';
                 const input = `<input type="number" step="any" value="${value}" oninput="calculateTensions()" placeholder="Wprowadź y">`;
-                const spokeNumber = rightIndices[i] !== null ? rightIndices[i] : '-';
-                html += `<tr><td>${spokeNumber}</td><td>${input}</td><td id="r${i}"></td><td id="rd${i}"></td></tr>`;
+                html += `<tr><td>${i + 1}</td><td>${input}</td><td id="r${i}"></td><td id="rd${i}"></td></tr>`;
                 rightInputs.push(document.createElement('input'));
             }
             html += '</table>';
@@ -338,50 +278,25 @@
                 Reading at -${maxDiff}% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
             `;
 
-            // Etykiety wykresu z przesunięciem
-            const maxCount = Math.max(leftCount, rightCount);
-            const labels = [];
-            const leftIndices = new Array(leftCount).fill(null);
-            const rightIndices = new Array(rightCount).fill(null);
-            let labelIndex = 1;
+            // Etykiety wykresu z sekwencyjnym numerowaniem, uwzględniającym przesunięcie
+            const totalCount = leftCount + rightCount;
+            const labels = Array.from({ length: totalCount }, (_, i) => `${i + 1}`);
+            const leftData = new Array(totalCount).fill(NaN);
+            const rightData = new Array(totalCount).fill(NaN);
 
-            for (let i = 0; i < maxCount; i++) {
-                if (spokeOrder === 'leftLeads') {
-                    if (i < leftCount) {
-                        labels.push(`${labelIndex}`);
-                        leftIndices[i] = labels.length - 1;
-                        labelIndex++;
-                    }
-                    if (i < rightCount) {
-                        labels.push(`${labelIndex}`);
-                        rightIndices[i] = labels.length - 1;
-                        labelIndex++;
-                    }
-                } else {
-                    if (i < rightCount) {
-                        labels.push(`${labelIndex}`);
-                        rightIndices[i] = labels.length - 1;
-                        labelIndex++;
-                    }
-                    if (i < leftCount) {
-                        labels.push(`${labelIndex}`);
-                        leftIndices[i] = labels.length - 1;
-                        labelIndex++;
-                    }
+            if (spokeOrder === 'leftLeads') {
+                for (let i = 0; i < leftCount; i++) {
+                    leftData[i * 2] = leftTensions[i] || NaN;
                 }
-            }
-
-            // Przygotowanie danych do wykresu
-            const leftData = new Array(labels.length).fill(NaN);
-            const rightData = new Array(labels.length).fill(NaN);
-            for (let i = 0; i < leftCount; i++) {
-                if (leftIndices[i] !== null) {
-                    leftData[leftIndices[i]] = leftTensions[i];
+                for (let i = 0; i < rightCount; i++) {
+                    rightData[i * 2 + 1] = rightTensions[i] || NaN;
                 }
-            }
-            for (let i = 0; i < rightCount; i++) {
-                if (rightIndices[i] !== null) {
-                    rightData[rightIndices[i]] = rightTensions[i];
+            } else { // rightLeads
+                for (let i = 0; i < rightCount; i++) {
+                    rightData[i * 2] = rightTensions[i] || NaN;
+                }
+                for (let i = 0; i < leftCount; i++) {
+                    leftData[i * 2 + 1] = leftTensions[i] || NaN;
                 }
             }
 
@@ -390,17 +305,17 @@
             myChart = new Chart(ctx, {
                 type: 'radar',
                 data: {
-                    labels: labels,
+                    labels: labels.slice(0, totalCount),
                     datasets: [{
                         label: 'Lewa strona',
-                        data: leftData,
+                        data: leftData.slice(0, totalCount),
                         backgroundColor: 'rgba(54, 162, 235, 0.2)',
                         borderColor: 'rgba(54, 162, 235, 1)',
                         borderWidth: 2,
                         spanGaps: true
                     }, {
                         label: 'Prawa strona',
-                        data: rightData,
+                        data: rightData.slice(0, totalCount),
                         backgroundColor: 'rgba(255, 99, 132, 0.2)',
                         borderColor: 'rgba(255, 99, 132, 1)',
                         borderWidth: 2,
@@ -419,10 +334,6 @@
             updateConstants();
             updateTables();
         };
-    </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9677f99e29d3a4a6',t:'MTc1MzkxMTIxMy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
-
     </script>
 </body>
 </html>
