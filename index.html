@@ -45,40 +45,27 @@
     <title>Kalkulator Napięcia Szprych</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f4f4f4; }
-        h1 { text-align: center; color: #333; font-size: 1.5em; }
-        .container { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .inline-inputs { display: flex; flex-wrap: wrap; gap: 10px; }
-        .left-inputs { display: flex; gap: 10px; flex: 1; min-width: 200px; }
-        .right-input { flex: 1; min-width: 150px; }
-        label { display: block; margin: 5px 0; font-weight: bold; font-size: 0.9em; }
-        input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
-        .side-tables { display: flex; flex-direction: column; }
-        .side-tables div { width: 100%; margin-bottom: 15px; }
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background-color: #f4f4f4; }
+        h1 { text-align: center; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .inline-inputs { display: flex; justify-content: space-between; }
+        .left-inputs { display: flex; gap: 10px; flex: 1; }
+        .right-input { flex: 1; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .side-tables { display: flex; justify-content: space-between; }
+        .side-tables div { width: 48%; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        table th, table td { border: 1px solid #ccc; padding: 6px; text-align: center; font-size: 0.8em; }
-        table td input { width: 80%; padding: 4px; }
-        .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; font-size: 0.8em; }
+        table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        table td input { width: 80%; }
+        .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
         #chart-container { margin-top: 20px; }
-        .error { color: red; font-size: 0.8em; }
+        .error { color: red; font-size: 14px; }
         .red-text { color: red; }
-        canvas { max-width: 100%; height: auto !important; }
+        canvas { max-width: 100%; }
         .custom-inputs { display: none; }
         .custom-inputs.active { display: flex; }
         .switcher { margin-top: 10px; text-align: center; }
-        .switcher label { margin: 0 10px; font-size: 0.9em; }
-
-        /* Media Queries dla mobilnych urządzeń */
-        @media (max-width: 600px) {
-            .inline-inputs { flex-direction: column; }
-            .left-inputs, .right-input { min-width: 100%; }
-            h1 { font-size: 1.2em; }
-            .container { padding: 10px; }
-            table th, table td { padding: 4px; font-size: 0.7em; }
-            table td input { width: 70%; padding: 3px; }
-            .stats { font-size: 0.7em; padding: 8px; }
-            #chart-container canvas { height: 200px !important; } /* Stała wysokość dla wykresu na małych ekranach */
-        }
     </style>
 </head>
 <body>
@@ -107,7 +94,7 @@
             </div>
             <div class="right-input">
                 <label for="maxDifference">Maks. różnica (%):</label>
-                <input type="number" id="maxDifference" step="any" placeholder="Wprowadź maks. różnicę" value="10" required oninput="calculateTensions()">
+                <input type="number" id="maxDifference" step="any" placeholder="Wprowadź maks. różnicę" value="10" oninput="calculateTensions()" min="0">
             </div>
         </div>
         <div class="side-spokes">
@@ -188,7 +175,6 @@
             const tablesDiv = document.getElementById('tables');
             let html = '';
 
-            // Zachowaj istniejące wartości
             const leftTable = tablesDiv.getElementsByTagName('table')[0];
             if (leftTable) {
                 const inputs = leftTable.getElementsByTagName('input');
@@ -200,7 +186,6 @@
                 rightValues = Array.from(inputs).map(input => input.value);
             }
 
-            // Lewa tabela
             html += '<div><h3>Lewa strona</h3>';
             html += '<table><tr><th>Szprycha</th><th>Odczyt</th><th>Naprężenie (N)</th><th>Różnica (%)</th></tr>';
             leftInputs = [];
@@ -213,7 +198,6 @@
             html += '</table>';
             html += '<div class="stats" id="leftStats"></div></div>';
 
-            // Prawa tabela
             html += '<div><h3>Prawa strona</h3>';
             html += '<table><tr><th>Szprycha</th><th>Odczyt</th><th>Naprężenie (N)</th><th>Różnica (%)</th></tr>';
             rightInputs = [];
@@ -233,7 +217,7 @@
         function calculateTensions() {
             const a = parseFloat(document.getElementById('constantA').value) || 0;
             const b = parseFloat(document.getElementById('constantB').value) || 0;
-            const maxDiff = parseFloat(document.getElementById('maxDifference').value) || 0;
+            const maxDiff = Math.abs(parseFloat(document.getElementById('maxDifference').value)) || 0;
             const tablesDiv = document.getElementById('tables');
             const ctx = document.getElementById('tensionChart').getContext('2d');
             const spokeOrder = document.querySelector('input[name="spokeOrder"]:checked').value;
@@ -252,7 +236,6 @@
             const leftTensions = [];
             const rightTensions = [];
 
-            // Lewa strona
             for (let i = 0; i < leftInputs.length; i++) {
                 const y = parseFloat(leftInputs[i].value);
                 const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
@@ -261,7 +244,6 @@
                 tensionCell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : Math.round(x);
             }
 
-            // Prawa strona
             for (let i = 0; i < rightInputs.length; i++) {
                 const y = parseFloat(rightInputs[i].value);
                 const x = isNaN(y) ? NaN : Math.exp((y + b) / a);
@@ -270,7 +252,6 @@
                 tensionCell.textContent = isNaN(x) || x <= 0 ? 'Błąd' : Math.round(x);
             }
 
-            // Statystyki i różnice
             const mean = arr => arr.reduce((a, b) => a + b, 0) / arr.length || 0;
             const stdDev = arr => {
                 const n = arr.length;
@@ -289,14 +270,13 @@
             const leftLower = leftMean * (1 - maxDiffFactor);
             const rightLower = rightMean * (1 - maxDiffFactor);
 
-            // Różnice w procentach
             for (let i = 0; i < leftTensions.length; i++) {
                 const x = leftTensions[i];
                 const diffCell = leftTable.rows[i + 1].cells[3];
                 if (!isNaN(x) && x > 0 && leftMean > 0) {
-                    const diff = Math.abs((x - leftMean) / leftMean * 100).toFixed(2);
-                    diffCell.textContent = `${diff}%`;
-                    diffCell.className = (diff > maxDiff) ? 'red-text' : '';
+                    const diff = ((x - leftMean) / leftMean * 100).toFixed(2);
+                    diffCell.textContent = `${diff >= 0 ? '+' : ''}${diff}%`;
+                    diffCell.className = (Math.abs(diff) > maxDiff) ? 'red-text' : '';
                 } else {
                     diffCell.textContent = 'Błąd';
                 }
@@ -305,9 +285,9 @@
                 const x = rightTensions[i];
                 const diffCell = rightTable.rows[i + 1].cells[3];
                 if (!isNaN(x) && x > 0 && rightMean > 0) {
-                    const diff = Math.abs((x - rightMean) / rightMean * 100).toFixed(2);
-                    diffCell.textContent = `${diff}%`;
-                    diffCell.className = (diff > maxDiff) ? 'red-text' : '';
+                    const diff = ((x - rightMean) / rightMean * 100).toFixed(2);
+                    diffCell.textContent = `${diff >= 0 ? '+' : ''}${diff}%`;
+                    diffCell.className = (Math.abs(diff) > maxDiff) ? 'red-text' : '';
                 } else {
                     diffCell.textContent = 'Błąd';
                 }
@@ -330,8 +310,7 @@
                 Reading at -${maxDiff}% Limit: ${((Math.log(rightLower) * a - b) || 0).toFixed(2)}
             `;
 
-            // Etykiety i dane na wykresie
-            const totalCount = Math.max(leftCount, rightCount) * 2; // Używamy podwójnej liczby dla par
+            const totalCount = Math.max(leftCount, rightCount) * 2;
             const labels = [];
             for (let i = 0; i < totalCount / 2; i++) {
                 labels.push(i + 1);
@@ -342,21 +321,20 @@
 
             if (spokeOrder === 'leftLeads') {
                 for (let i = 0; i < leftCount; i++) {
-                    leftData[i * 2] = leftTensions[i] || NaN; // Parzyste pozycje dla lewej
+                    leftData[i * 2] = leftTensions[i] || NaN;
                 }
                 for (let i = 0; i < rightCount; i++) {
-                    rightData[i * 2 + 1] = rightTensions[i] || NaN; // Nieparzyste pozycje dla prawej
+                    rightData[i * 2 + 1] = rightTensions[i] || NaN;
                 }
-            } else { // rightLeads
+            } else {
                 for (let i = 0; i < rightCount; i++) {
-                    rightData[i * 2] = rightTensions[i] || NaN; // Parzyste pozycje dla prawej
+                    rightData[i * 2] = rightTensions[i] || NaN;
                 }
                 for (let i = 0; i < leftCount; i++) {
-                    leftData[i * 2 + 1] = leftTensions[i] || NaN; // Nieparzyste pozycje dla lewej
+                    leftData[i * 2 + 1] = leftTensions[i] || NaN;
                 }
             }
 
-            // Aktualizacja wykresu
             if (myChart) myChart.destroy();
             myChart = new Chart(ctx, {
                 type: 'radar',
@@ -385,7 +363,6 @@
             });
         }
 
-        // Inicjalizacja przy załadowaniu strony
         window.onload = function() {
             updateConstants();
             updateTables();
