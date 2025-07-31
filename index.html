@@ -45,27 +45,40 @@
     <title>Kalkulator Napięcia Szprych</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background-color: #f4f4f4; }
-        h1 { text-align: center; color: #333; }
-        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .inline-inputs { display: flex; justify-content: space-between; }
-        .left-inputs { display: flex; gap: 10px; flex: 1; }
-        .right-input { flex: 1; }
-        label { display: block; margin: 10px 0 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        .side-tables { display: flex; justify-content: space-between; }
-        .side-tables div { width: 48%; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f4f4f4; }
+        h1 { text-align: center; color: #333; font-size: 1.5em; }
+        .container { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .inline-inputs { display: flex; flex-wrap: wrap; gap: 10px; }
+        .left-inputs { display: flex; gap: 10px; flex: 1; min-width: 200px; }
+        .right-input { flex: 1; min-width: 150px; }
+        label { display: block; margin: 5px 0; font-weight: bold; font-size: 0.9em; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .side-tables { display: flex; flex-direction: column; }
+        .side-tables div { width: 100%; margin-bottom: 15px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        table td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-        table td input { width: 80%; }
-        .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
+        table th, table td { border: 1px solid #ccc; padding: 6px; text-align: center; font-size: 0.8em; }
+        table td input { width: 80%; padding: 4px; }
+        .stats { margin-top: 10px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; font-size: 0.8em; }
         #chart-container { margin-top: 20px; }
-        .error { color: red; font-size: 14px; }
+        .error { color: red; font-size: 0.8em; }
         .red-text { color: red; }
-        canvas { max-width: 100%; }
+        canvas { max-width: 100%; height: auto !important; }
         .custom-inputs { display: none; }
         .custom-inputs.active { display: flex; }
         .switcher { margin-top: 10px; text-align: center; }
+        .switcher label { margin: 0 10px; font-size: 0.9em; }
+
+        /* Media Queries dla mobilnych urządzeń */
+        @media (max-width: 600px) {
+            .inline-inputs { flex-direction: column; }
+            .left-inputs, .right-input { min-width: 100%; }
+            h1 { font-size: 1.2em; }
+            .container { padding: 10px; }
+            table th, table td { padding: 4px; font-size: 0.7em; }
+            table td input { width: 70%; padding: 3px; }
+            .stats { font-size: 0.7em; padding: 8px; }
+            #chart-container canvas { height: 200px !important; } /* Stała wysokość dla wykresu na małych ekranach */
+        }
     </style>
 </head>
 <body>
